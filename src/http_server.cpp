@@ -1,9 +1,9 @@
 #include <sys/socket.h>
 #include <csignal>
 #include <atomic>
-#include <netinet/in.h> // sockaddr_in
-#include <arpa/inet.h>  // htons, htonl
-#include <unistd.h>     // close
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 #include <sstream>
 #include <string>
 #include <iostream>
@@ -69,12 +69,13 @@ void handle_client(int client_socket)
     std::string request_text = read_http_request(client_socket);
     HttpRequest req = parse_request(request_text);
 
-    std::cout << "Request: " << req.method << " " << req.path << std::endl;
-    for (auto header: req.headers) {
-        auto& [key, value] = header;
-        std::cout << key << ": " << value << std::endl;
-    }
-    std::cout << "Body: " << req.body << std::endl;
+    // std::cout << "Request: " << req.method << " " << req.path << std::endl;
+    // for (auto header : req.headers)
+    // {
+    //     auto &[key, value] = header;
+    //     std::cout << key << ": " << value << std::endl;
+    // }
+    // std::cout << "Body: " << req.body << std::endl;
 
     std::string body = "<h1>404 Not Found</h1>";
     int status = 404;
@@ -82,7 +83,7 @@ void handle_client(int client_socket)
     auto match = router.match_route(req.method, req.path);
     if (match)
     {
-        auto& [handler, params] = *match;
+        auto &[handler, params] = *match;
         body = handler(req, params);
         status = 200;
     }
@@ -90,12 +91,12 @@ void handle_client(int client_socket)
     std::string response = make_response(body, status);
     send(client_socket, response.c_str(), response.size(), 0);
 
+    close(client_socket);
+
     {
         std::lock_guard<std::mutex> lock(clients_mutex);
         active_clients.extract(client_socket);
     }
-
-    close(client_socket);
 }
 
 void signal_handler(int signum)
@@ -121,7 +122,6 @@ int main()
     if (server_socket < 0)
     {
         std::cerr << "Error creating socket" << std::endl;
-        ;
         return 1;
     }
 
@@ -158,15 +158,31 @@ int main()
     router.add_route(
         "GET",
         "/",
-        [](HttpRequest&, Params&)
+        [](HttpRequest &, Params &)
         {
             return "<h1>Welcome Home!</h1>";
         });
 
     router.add_route(
         "GET",
+        "/hello/world",
+        [](HttpRequest &, Params &)
+        {
+            return "<h1>Hello World!!!</h1>";
+        });
+
+    router.add_route(
+        "GET",
+        "/hello/:test",
+        [](HttpRequest &, Params &params)
+        {
+            return "<h1>" + params.at("test") + "</h1>";
+        });
+
+    router.add_route(
+        "GET",
         "/hello",
-        [](HttpRequest&, Params&)
+        [](HttpRequest &, Params &)
         {
             return "<h1>Hello World!</h1>";
         });
@@ -174,7 +190,7 @@ int main()
     router.add_route(
         "GET",
         "/:id",
-        [](HttpRequest&, Params& params)
+        [](HttpRequest &, Params &params)
         {
             return "<h1>" + params.at("id") + "</h1>";
         });
@@ -201,7 +217,8 @@ int main()
                 std::lock_guard<std::mutex> lock(clients_mutex);
                 active_clients.insert(client_socket);
             }
-            std::cout << "Handling client" << std::endl;
+
+            std::cout << "Handling client: " << client_socket << std::endl;
             handle_client(client_socket); });
     }
 
